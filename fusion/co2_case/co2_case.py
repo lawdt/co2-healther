@@ -38,9 +38,9 @@ PARAMS = [
     ('BOARD_GAP', '0.5 mm', 'Gap at board short edges'),
     ('BOARD_SIDE_GAP', '1.6 mm', 'Gap at board long edges'),
     ('HOLE_INSET', '2.5 mm', 'Mounting hole center from board edges'),
-    ('STANDOFF_D', '6 mm', 'Standoff diameter'),
-    ('STANDOFF_PILOT', '2.6 mm', 'Pilot hole for M3 self-tapping screw'),
-    ('STANDOFF_PILOT_DEPTH', '6 mm', 'Pilot hole depth'),
+    ('STANDOFF_D', '7.5 mm', 'Standoff diameter'),
+    ('STANDOFF_PILOT', '3.8 mm', 'Hole for M3x5x4.2 heat-set insert'),
+    ('STANDOFF_PILOT_DEPTH', '6 mm', 'Insert hole depth'),
     # OLED visible area relative to the board, USB edge on the right
     ('OLED_FROM_RIGHT', '7 mm', 'Visible area to the USB-side board edge'),
     ('OLED_FROM_BOTTOM', '12 mm', 'Visible area to the bottom board edge'),
@@ -58,9 +58,9 @@ PARAMS = [
     # Bay
     ('BAY_L', '36 mm', 'Bay length'),
     ('PARTITION', '2 mm', 'Partition thickness'),
-    ('WIRE_SLOT_W', '14 mm', 'Wire slot width in the partition'),
-    ('WIRE_SLOT_Z0', '0.5 mm', 'Wire slot bottom above the floor'),
-    ('WIRE_SLOT_H', '4 mm', 'Wire slot height'),
+    ('PART_NOTCH_W', '16 mm', 'Open notch in the partition to lay the wires in'),
+    ('WIRE_CHANNEL_H', '4 mm', 'Room for the wires under the lid tongue'),
+    ('TONGUE_FIT', '0.2 mm', 'Clearance of the lid tongue in the notch'),
     # SCD41 module, flat with the air inlet up
     ('SENSOR_L', '21.8 mm', 'Sensor board length'),
     ('SENSOR_W', '13.8 mm', 'Sensor board width'),
@@ -334,9 +334,11 @@ def build_base(m):
     s.rect(X('BAY_L - 0.5 mm'), Y('INNER_W - PART_CLEAR'), 'PARTITION + 1 mm', 'PART_CLEAR')
     s.extrude(CUT, 'z', 'LID_Z - LIP_H - LIP_NOTCH_CLEAR', 'LIP_H + LIP_NOTCH_CLEAR + 1 mm', body='Base')
 
-    s = Sketch(m, 'xy', 'Wire slot')
-    s.rect(X('BAY_L - 0.5 mm'), Y('INNER_W / 2 - WIRE_SLOT_W / 2'), 'PARTITION + 1 mm', 'WIRE_SLOT_W')
-    s.extrude(CUT, 'z', Z('WIRE_SLOT_Z0'), 'WIRE_SLOT_H', body='Base')
+    # Open notch down to the floor: the soldered harness is laid in from above,
+    # a tongue on the lid closes it and leaves a channel for the wires
+    s = Sketch(m, 'xy', 'Partition notch')
+    s.rect(X('BAY_L - 0.5 mm'), Y('INNER_W / 2 - PART_NOTCH_W / 2'), 'PARTITION + 1 mm', 'PART_NOTCH_W')
+    s.extrude(CUT, 'z', 'FLOOR', 'INNER_H + 1 mm', body='Base')
 
     holes = [(X('BOARD_X + HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
              (X('BOARD_X + BOARD_L - HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
@@ -491,6 +493,11 @@ def build_lid(m):
            'FIT + LIP_T + 0.5 mm', 'USB_W + 2 * USB_LIP_GAP')
     s.extrude(CUT, 'z', 'LID_Z - LIP_H - 0.1 mm', 'LIP_H + 0.1 mm', body='Lid')
 
+    # Tongue that closes the partition notch over the wire channel
+    s = Sketch(m, 'xy', 'Partition tongue')
+    s.rect(X('BAY_L'), Y('INNER_W / 2 - PART_NOTCH_W / 2 + TONGUE_FIT'), 'PARTITION', 'PART_NOTCH_W - 2 * TONGUE_FIT')
+    s.extrude(JOIN, 'z', Z('WIRE_CHANNEL_H'), 'INNER_H - WIRE_CHANNEL_H', body='Lid')
+
     through = ('LID_Z - 0.1 mm', 'LID + 0.2 mm')
 
     s = Sketch(m, 'xy', 'Display window')
@@ -551,11 +558,19 @@ def build_lid(m):
 def run(_context):
     app = adsk.core.Application.get()
     design = adsk.fusion.Design.cast(app.activeProduct)
-    # Reuse an empty active design, otherwise start a new document
-    if design is None or design.rootComponent.bRepBodies.count or design.timeline.count:
+    if design is None:
         app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
         design = adsk.fusion.Design.cast(app.activeProduct)
     design.designType = adsk.fusion.DesignTypes.ParametricDesignType
+
+    # Rebuild in place: drop the previous timeline and parameters
+    timeline = design.timeline
+    if timeline.count:
+        timeline.markerPosition = 0
+        timeline.deleteAllAfterMarker()
+    params = design.userParameters
+    for i in range(params.count - 1, -1, -1):
+        params.item(i).deleteMe()
 
     add_params(design)
     m = Model(design)
