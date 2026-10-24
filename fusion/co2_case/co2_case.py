@@ -58,7 +58,7 @@ PARAMS = [
     # Bay
     ('BAY_L', '36 mm', 'Bay length'),
     ('PARTITION', '2 mm', 'Partition thickness'),
-    ('WIRE_SLOT_W', '10 mm', 'Wire slot width in the partition'),
+    ('WIRE_SLOT_W', '14 mm', 'Wire slot width in the partition'),
     ('WIRE_SLOT_Z0', '0.5 mm', 'Wire slot bottom above the floor'),
     ('WIRE_SLOT_H', '4 mm', 'Wire slot height'),
     # SCD41 module, flat with the air inlet up
