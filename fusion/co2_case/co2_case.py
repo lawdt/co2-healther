@@ -86,8 +86,8 @@ PARAMS = [
     ('BUTTON_BODY', '12.4 mm', 'Pocket for the body'),
     ('BUTTON_FRAME', '1.3 mm', 'Frame wall'),
     ('BUTTON_FRAME_DEPTH', '4 mm', 'Frame depth'),
-    ('BUTTON_STACK', '11.5 mm', 'Body bottom to cap top, without legs'),
-    ('BUTTON_PROTRUDE', '2 mm', 'Cap above the lid'),
+    ('BUTTON_STACK', '12.5 mm', 'Body bottom to cap top, without legs'),
+    ('BUTTON_PROTRUDE', '4 mm - LID', 'Cap above the lid: 4 mm cap above its rim, rim under the lid'),
     ('BUTTON_PEDESTAL', '8 mm', 'Pedestal under the body, leaves room for the legs'),
     # Buzzer TMB12A05, 12 x 9.5 mm
     ('BUZZER_X', '27 mm', 'Buzzer center X'),
@@ -112,6 +112,10 @@ PARAMS = [
     ('HOOK_TIP_T', '3 mm', 'Hook tip thickness'),
     ('HOOK_TOP_MARGIN', '6 mm', 'Hook stem from the top outer edge'),
     ('SKADIS_ROW', '20 mm', 'Vertical offset of the staggered slot row'),
+    ('HOOK_FLANGE_L', '10 mm', 'Flange length against the back of the base'),
+    ('HOOK_FLANGE_T', '1.5 mm', 'Flange thickness'),
+    ('HOOK_R', '1 mm', 'Rounding of the hook and peg edges'),
+    ('SLOT_CLEAR', '0.15 mm', 'Floor slot clearance around the tenons'),
     ('PEG_W', '4.4 mm', 'Locating peg width across the slot'),
     ('PEG_H', '5 mm', 'Locating peg height along the slot'),
     ('PEG_LEN', '4 mm', 'Locating peg length, below the pegboard thickness'),
@@ -129,6 +133,9 @@ PARAMS = [
     ('OLED_Y', 'BOARD_Y + OLED_FROM_BOTTOM', 'Visible area bottom edge'),
     ('PART_CLEAR', 'FIT + LIP_T + 0.2 mm', 'Partition gap for the lid lip'),
     ('HOOK_Y', 'OUTER_W - HOOK_TOP_MARGIN - HOOK_STEM_D', 'Hook stem bottom edge'),
+    ('HOOK_CX', 'OUTER_L / 2', 'Center between the hooks'),
+    ('PEG_CX', 'HOOK_CX', 'Peg center X'),
+    ('PEG_Y', 'HOOK_Y - SKADIS_ROW + PEG_GAP', 'Peg bottom edge'),
 ]
 
 AXES = {'x': 0, 'y': 1, 'z': 2}
@@ -247,12 +254,17 @@ class Sketch:
         dim = self.sk.sketchDimensions.addDiameterDimension(circ, self._text(c, dv, dv))
         dim.parameter.expression = d
 
-    def extrude(self, op, axis, start, length, direction=1, body=None, name=None):
-        """Extrude all profiles along the model axis from coordinate `start`."""
+    def extrude(self, op, axis, start, length, direction=1, body=None, name=None, only=None):
+        """Extrude profiles along the model axis from coordinate `start`.
+
+        All profiles by default; `only` filters them, e.g. to skip the
+        region enclosed by a ring.
+        """
         self.sk.isComputeDeferred = False
         profiles = adsk.core.ObjectCollection.create()
         for p in self.sk.profiles:
-            profiles.add(p)
+            if only is None or only(p):
+                profiles.add(p)
 
         n = vec_comp(self.normal, axis)
         features = self.m.root.features.extrudeFeatures
@@ -383,22 +395,65 @@ def build_base(m):
     vent = s.extrude(CUT, 'y', 'WALL + INNER_W - 0.5 mm', 'WALL + 1 mm', body='Base')
     pattern_x(m, vent, 'BACK_VENT_COUNT', 'VENT_STEP', 'Back vents')
 
-    # SKADIS hooks on the back: stems through the slots, tips down behind the board
-    hook_x = ['OUTER_L / 2 - SKADIS_PITCH / 2 - HOOK_W / 2', 'OUTER_L / 2 + SKADIS_PITCH / 2 - HOOK_W / 2']
-    s = Sketch(m, 'xy', 'Hook stems')
-    for x in hook_x:
-        s.rect(x, 'HOOK_Y', 'HOOK_W', 'HOOK_STEM_D')
-    s.extrude(JOIN, 'z', '0 mm', 'SKADIS_T + HOOK_CLEAR', direction=-1, body='Base')
+    # Floor slots for the tenons of the separately printed hooks and peg
+    c = 'SLOT_CLEAR'
+    s = Sketch(m, 'xy', 'Hanger slots')
+    for x in HOOK_X:
+        s.rect('{} - {}'.format(x, c), 'HOOK_Y - {}'.format(c), 'HOOK_W + 2 * {}'.format(c), 'HOOK_STEM_D + 2 * {}'.format(c))
+    s.rect('PEG_CX - PEG_W / 2 - {}'.format(c), 'PEG_Y - {}'.format(c), 'PEG_W + 2 * {}'.format(c), 'PEG_H + 2 * {}'.format(c))
+    s.extrude(CUT, 'z', '-0.1 mm', 'FLOOR + 0.2 mm', body='Base')
 
-    s = Sketch(m, 'xy', 'Hook tips')
-    for x in hook_x:
-        s.rect(x, 'HOOK_Y - HOOK_TIP', 'HOOK_W', 'HOOK_TIP + HOOK_STEM_D')
-    s.extrude(JOIN, 'z', '-(SKADIS_T + HOOK_CLEAR)', 'HOOK_TIP_T', direction=-1, body='Base')
 
-    # Locating peg in the staggered slot between and below the hooks; keeps the box from swaying
-    s = Sketch(m, 'xy', 'Locating peg')
-    s.rect('OUTER_L / 2 - PEG_W / 2', 'HOOK_Y - SKADIS_ROW + PEG_GAP', 'PEG_W', 'PEG_H')
-    s.extrude(JOIN, 'z', '0 mm', 'PEG_LEN', direction=-1, body='Base')
+# SKADIS hooks 40 mm apart; the peg goes into the staggered slot row between and below them
+HOOK_X = ['HOOK_CX - SKADIS_PITCH / 2 - HOOK_W / 2', 'HOOK_CX + SKADIS_PITCH / 2 - HOOK_W / 2']
+
+
+def fillet(m, body, radius, keep, name):
+    edges = adsk.core.ObjectCollection.create()
+    for e in m.body(body).edges:
+        if keep(e):
+            edges.add(e)
+    if edges.count == 0:
+        return None
+    fillets = m.root.features.filletFeatures
+    inp = fillets.createInput()
+    inp.edgeSetInputs.addConstantRadiusEdgeSet(edges, adsk.core.ValueInput.createByString(radius), True)
+    f = fillets.add(inp)
+    f.name = name
+    return f
+
+
+def build_hangers(m):
+    """Hooks and the peg print on their side without supports and get glued into the floor slots.
+
+    Each part has a tenon in the floor slot, a flange against the back of the
+    base, and the working part outside: a stem with a tip for the hooks, a
+    straight pin for the peg.
+    """
+    flange_out = '-(HOOK_FLANGE_T)'
+    stem_end = '-(HOOK_FLANGE_T + SKADIS_T + HOOK_CLEAR)'
+
+    s = Sketch(m, 'yz', 'Hook profile')
+    s.rect('HOOK_Y', '0 mm', 'HOOK_STEM_D', 'FLOOR')
+    s.rect('HOOK_Y + HOOK_STEM_D / 2 - HOOK_FLANGE_L / 2', flange_out, 'HOOK_FLANGE_L', 'HOOK_FLANGE_T')
+    s.rect('HOOK_Y', stem_end, 'HOOK_STEM_D', 'SKADIS_T + HOOK_CLEAR')
+    s.rect('HOOK_Y - HOOK_TIP', '-(HOOK_FLANGE_T + SKADIS_T + HOOK_CLEAR + HOOK_TIP_T)',
+           'HOOK_TIP + HOOK_STEM_D', 'HOOK_TIP_T')
+    for i, x in enumerate(HOOK_X):
+        name = 'Hook {}'.format('LR'[i])
+        s.extrude(NEW, 'x', x, 'HOOK_W', name=name).bodies.item(0).name = name
+
+    s = Sketch(m, 'yz', 'Peg profile')
+    s.rect('PEG_Y', '0 mm', 'PEG_H', 'FLOOR')
+    s.rect('PEG_Y + PEG_H / 2 - HOOK_FLANGE_L / 2', flange_out, 'HOOK_FLANGE_L', 'HOOK_FLANGE_T')
+    s.rect('PEG_Y', '-(HOOK_FLANGE_T + PEG_LEN)', 'PEG_H', 'PEG_LEN')
+    s.extrude(NEW, 'x', 'PEG_CX - PEG_W / 2', 'PEG_W', name='Peg').bodies.item(0).name = 'Peg'
+
+    # Round everything that goes into the pegboard; the flange and tenon stay sharp to sit flush
+    limit = m.val('-(HOOK_FLANGE_T)') - 1e-4
+    outside = lambda e: e.boundingBox.maxPoint.z < limit
+    for body in ('Hook L', 'Hook R', 'Peg'):
+        fillet(m, body, 'HOOK_R', outside, '{} rounding'.format(body))
 
 
 def build_lid(m):
@@ -406,13 +461,11 @@ def build_lid(m):
     s.rect('0 mm', '0 mm', 'OUTER_L', 'OUTER_W')
     s.extrude(NEW, 'z', 'LID_Z', 'LID').bodies.item(0).name = 'Lid'
 
-    # Locating lip around the whole perimeter
+    # Locating lip around the whole perimeter: only the ring between two rectangles
     s = Sketch(m, 'xy', 'Lid lip')
-    s.rect(X('FIT'), Y('FIT'), 'LIP_T', 'INNER_W - 2 * FIT')
-    s.rect(X('INNER_L - FIT - LIP_T'), Y('FIT'), 'LIP_T', 'INNER_W - 2 * FIT')
-    s.rect(X('FIT + LIP_T'), Y('FIT'), 'INNER_L - 2 * FIT - 2 * LIP_T', 'LIP_T')
-    s.rect(X('FIT + LIP_T'), Y('INNER_W - FIT - LIP_T'), 'INNER_L - 2 * FIT - 2 * LIP_T', 'LIP_T')
-    s.extrude(JOIN, 'z', 'LID_Z - LIP_H', 'LIP_H', body='Lid')
+    s.rect(X('FIT'), Y('FIT'), 'INNER_L - 2 * FIT', 'INNER_W - 2 * FIT')
+    s.rect(X('FIT + LIP_T'), Y('FIT + LIP_T'), 'INNER_L - 2 * FIT - 2 * LIP_T', 'INNER_W - 2 * FIT - 2 * LIP_T')
+    s.extrude(JOIN, 'z', 'LID_Z - LIP_H', 'LIP_H', body='Lid', only=lambda p: p.profileLoops.count == 2)
 
     # Gap in the lip over the USB-C receptacle at the board edge
     s = Sketch(m, 'xy', 'Lip USB gap')
@@ -490,4 +543,5 @@ def run(_context):
     m = Model(design)
     build_base(m)
     build_lid(m)
+    build_hangers(m)
     app.activeViewport.fit()
