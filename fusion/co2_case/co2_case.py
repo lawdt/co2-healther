@@ -49,6 +49,7 @@ PARAMS = [
     ('LID_SCREW_HOLE', '3.4 mm', 'Clearance hole for M3'),
     ('LID_CB_D', '6.4 mm', 'Counterbore for the ISO 7380 head (5.7 mm)'),
     ('LID_CB_DEPTH', '1 mm', 'Counterbore depth; leaves 3.2 mm of thread in the insert'),
+    ('SACRIFICIAL_T', '0.2 mm', 'Sacrificial layer over the screw hole, one print layer'),
     ('USB_KEEP_L', '9 mm', 'Free zone over the USB-C receptacle from the wall'),
     # OLED visible area relative to the board, USB edge on the right
     ('OLED_FROM_RIGHT', '7 mm', 'Visible area to the USB-side board edge'),
@@ -587,7 +588,10 @@ def build_lid(m):
     s = Sketch(m, 'xy', 'Lid screw holes')
     for x, y in BOARD_HOLES:
         s.circle(x, y, 'LID_SCREW_HOLE')
-    s.extrude(CUT, 'z', Z('UNDER + PCB_T') + ' - 0.1 mm', 'TOP_CLEAR + LID + 0.2 mm', body='Lid')
+    # The hole stops one layer below the counterbore: printed face down, that layer bridges
+    # the counterbore and is pushed through by the screw afterwards
+    s.extrude(CUT, 'z', Z('UNDER + PCB_T') + ' - 0.1 mm', 'TOP_CLEAR + 0.1 mm + LID - LID_CB_DEPTH - SACRIFICIAL_T',
+              body='Lid')
 
     s = Sketch(m, 'xy', 'Lid counterbores')
     for x, y in BOARD_HOLES:
