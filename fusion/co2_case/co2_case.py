@@ -27,6 +27,7 @@ PARAMS = [
     ('FIT', '0.2 mm', 'Clearance between lid lip and walls'),
     ('LIP_H', '3 mm', 'Lid lip height'),
     ('LIP_T', '1.2 mm', 'Lid lip thickness'),
+    ('LIP_NOTCH_CLEAR', '0.3 mm', 'Clearance under the lip in the partition notches'),
     # HW-364A board
     ('BOARD_L', '59 mm', 'Board length'),
     ('BOARD_W', '30.8 mm', 'Board width'),
@@ -52,6 +53,7 @@ PARAMS = [
     ('USB_W', '9.6 mm', 'USB opening width'),
     ('USB_H', '3.8 mm', 'USB opening height'),
     ('USB_Z_OFF', 'PCB_T / 2 + 1.63 mm', 'USB center above the board mid-plane'),
+    ('USB_LIP_GAP', '1 mm', 'Lid lip gap around the receptacle'),
     # Bay
     ('BAY_L', '36 mm', 'Bay length'),
     ('PARTITION', '2 mm', 'Partition thickness'),
@@ -310,8 +312,14 @@ def build_base(m):
     s.extrude(CUT, 'z', 'FLOOR', 'INNER_H + 1 mm', body='Base')
 
     s = Sketch(m, 'xy', 'Partition')
-    s.rect(X('BAY_L'), Y('PART_CLEAR'), 'PARTITION', 'INNER_W - 2 * PART_CLEAR')
+    s.rect(X('BAY_L'), Y('0 mm'), 'PARTITION', 'INNER_W')
     s.extrude(JOIN, 'z', 'FLOOR', 'INNER_H', body='Base')
+
+    # Notches at the top corners of the partition let the lid lip pass
+    s = Sketch(m, 'xy', 'Partition notches')
+    s.rect(X('BAY_L - 0.5 mm'), Y('0 mm'), 'PARTITION + 1 mm', 'PART_CLEAR')
+    s.rect(X('BAY_L - 0.5 mm'), Y('INNER_W - PART_CLEAR'), 'PARTITION + 1 mm', 'PART_CLEAR')
+    s.extrude(CUT, 'z', 'LID_Z - LIP_H - LIP_NOTCH_CLEAR', 'LIP_H + LIP_NOTCH_CLEAR + 1 mm', body='Base')
 
     s = Sketch(m, 'xy', 'Wire slot')
     s.rect(X('BAY_L - 0.5 mm'), Y('INNER_W / 2 - WIRE_SLOT_W / 2'), 'PARTITION + 1 mm', 'WIRE_SLOT_W')
@@ -398,12 +406,19 @@ def build_lid(m):
     s.rect('0 mm', '0 mm', 'OUTER_L', 'OUTER_W')
     s.extrude(NEW, 'z', 'LID_Z', 'LID').bodies.item(0).name = 'Lid'
 
-    # Locating lip on three sides; the USB side stays open
+    # Locating lip around the whole perimeter
     s = Sketch(m, 'xy', 'Lid lip')
     s.rect(X('FIT'), Y('FIT'), 'LIP_T', 'INNER_W - 2 * FIT')
-    s.rect(X('FIT + LIP_T'), Y('FIT'), 'INNER_L - 2 * FIT - LIP_T', 'LIP_T')
-    s.rect(X('FIT + LIP_T'), Y('INNER_W - FIT - LIP_T'), 'INNER_L - 2 * FIT - LIP_T', 'LIP_T')
+    s.rect(X('INNER_L - FIT - LIP_T'), Y('FIT'), 'LIP_T', 'INNER_W - 2 * FIT')
+    s.rect(X('FIT + LIP_T'), Y('FIT'), 'INNER_L - 2 * FIT - 2 * LIP_T', 'LIP_T')
+    s.rect(X('FIT + LIP_T'), Y('INNER_W - FIT - LIP_T'), 'INNER_L - 2 * FIT - 2 * LIP_T', 'LIP_T')
     s.extrude(JOIN, 'z', 'LID_Z - LIP_H', 'LIP_H', body='Lid')
+
+    # Gap in the lip over the USB-C receptacle at the board edge
+    s = Sketch(m, 'xy', 'Lip USB gap')
+    s.rect(X('INNER_L - FIT - LIP_T - 0.5 mm'), Y('BOARD_Y + USB_Y - USB_W / 2 - USB_LIP_GAP'),
+           'FIT + LIP_T + 0.5 mm', 'USB_W + 2 * USB_LIP_GAP')
+    s.extrude(CUT, 'z', 'LID_Z - LIP_H - 0.1 mm', 'LIP_H + 0.1 mm', body='Lid')
 
     through = ('LID_Z - 0.1 mm', 'LID + 0.2 mm')
 
