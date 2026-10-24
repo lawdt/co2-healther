@@ -42,10 +42,12 @@ PARAMS = [
     ('STANDOFF_PILOT', '3.8 mm', 'Hole for M3x5x4.2 heat-set insert'),
     ('STANDOFF_PILOT_DEPTH', '6 mm', 'Insert hole depth'),
     # Lid screws M3x10 ISO 7380 through the lid and the board into the inserts
-    ('LID_BOSS_D', '6 mm', 'Boss under the lid pressing on the board'),
+    ('LID_BOSS_D', '8 mm', 'Boss under the lid pressing on the board, trimmed at the walls'),
+    ('LID_BOSS_FILLET', '1.2 mm', 'Fillet between the boss and the lid'),
     ('LID_SCREW_HOLE', '3.4 mm', 'Clearance hole for M3'),
     ('LID_CB_D', '6.4 mm', 'Counterbore for the ISO 7380 head (5.7 mm)'),
-    ('LID_CB_DEPTH', '1.8 mm', 'Counterbore depth, head flush with the lid'),
+    ('LID_CB_DEPTH', '1 mm', 'Counterbore depth; leaves 3.2 mm of thread in the insert'),
+    ('USB_KEEP_L', '9 mm', 'Free zone over the USB-C receptacle from the wall'),
     # OLED visible area relative to the board, USB edge on the right
     ('OLED_FROM_RIGHT', '7 mm', 'Visible area to the USB-side board edge'),
     ('OLED_FROM_BOTTOM', '12 mm', 'Visible area to the bottom board edge'),
@@ -288,7 +290,8 @@ class Sketch:
             adsk.fusion.DistanceExtentDefinition.create(adsk.core.ValueInput.createByString(length)),
             extent_dir)
         if body is not None:
-            inp.participantBodies = [self.m.body(body)]
+            names = body if isinstance(body, (list, tuple)) else [body]
+            inp.participantBodies = [self.m.body(n) for n in names]
         feature = features.add(inp)
         feature.name = name or self.sk.name
         return feature
@@ -431,7 +434,7 @@ BOARD_HOLES = [(X('BOARD_X + HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
 HOOK_X = ['HOOK_CX - SKADIS_PITCH / 2 - HOOK_W / 2', 'HOOK_CX + SKADIS_PITCH / 2 - HOOK_W / 2']
 
 
-def fillet(m, body, radius, keep, name):
+def fillet(m, body, radius, keep, name, tangent_chain=True):
     edges = adsk.core.ObjectCollection.create()
     for e in m.body(body).edges:
         if keep(e):
@@ -440,7 +443,7 @@ def fillet(m, body, radius, keep, name):
         return None
     fillets = m.root.features.filletFeatures
     inp = fillets.createInput()
-    inp.edgeSetInputs.addConstantRadiusEdgeSet(edges, adsk.core.ValueInput.createByString(radius), True)
+    inp.edgeSetInputs.addConstantRadiusEdgeSet(edges, adsk.core.ValueInput.createByString(radius), tangent_chain)
     f = fillets.add(inp)
     f.name = name
     return f
@@ -515,10 +518,51 @@ def build_lid(m):
 
     # Lid screws go through the board mounting holes into the standoff inserts;
     # bosses under the lid clamp the board, so the same four screws hold both
+    # The boss circles are drawn together with the board compartment outline and the
+    # free zone over the USB-C receptacle; only the parts inside the compartment and
+    # outside that zone are extruded, so the bosses clear the walls and the partition
+    boss_z = Z('UNDER + PCB_T')
     s = Sketch(m, 'xy', 'Lid bosses')
     for x, y in BOARD_HOLES:
         s.circle(x, y, 'LID_BOSS_D')
-    s.extrude(JOIN, 'z', Z('UNDER + PCB_T'), 'TOP_CLEAR', body='Lid')
+    comp = (X('BOARD_X - BOARD_GAP + FIT'), Y('FIT'), 'INNER_L - BOARD_X + BOARD_GAP - 2 * FIT', 'INNER_W - 2 * FIT')
+    usb = (X('INNER_L - USB_KEEP_L'), Y('BOARD_Y + USB_Y - USB_W / 2 - USB_LIP_GAP'),
+           'USB_KEEP_L + 0.5 mm', 'USB_W + 2 * USB_LIP_GAP')
+    s.rect(*comp)
+    s.rect(*usb)
+
+    def box(r):
+        x0, y0, w, h = (m.val(e) for e in r)
+        return x0, y0, x0 + w, y0 + h
+
+    comp_box, usb_box = box(comp), box(usb)
+    centers = [(m.val(x), m.val(y)) for x, y in BOARD_HOLES]
+    radius = m.val('LID_BOSS_D / 2')
+
+    def boss_part(p):
+        c = s.sk.sketchToModelSpace(p.areaProperties().centroid)
+        inside = lambda b: b[0] < c.x < b[2] and b[1] < c.y < b[3]
+        near = any((c.x - cx) ** 2 + (c.y - cy) ** 2 < radius ** 2 for cx, cy in centers)
+        return near and inside(comp_box) and not inside(usb_box)
+
+    s.extrude(JOIN, 'z', boss_z, 'TOP_CLEAR', body='Lid', only=boss_part)
+
+    # Fillet where the bosses meet the lid underside
+    lid_z = m.val('LID_Z')
+    centers = [(m.val(x), m.val(y)) for x, y in BOARD_HOLES]
+    reach = m.val('LID_BOSS_D / 2') + 1e-3
+
+    def boss_root(e):
+        bb = e.boundingBox
+        if abs(bb.minPoint.z - lid_z) > 1e-4 or abs(bb.maxPoint.z - lid_z) > 1e-4:
+            return False
+        if e.geometry.curveType not in (adsk.core.Curve3DTypes.Circle3DCurveType, adsk.core.Curve3DTypes.Arc3DCurveType):
+            return False
+        c = e.geometry.center
+        return any(abs(((c.x - cx) ** 2 + (c.y - cy) ** 2) ** 0.5) < 1e-3 and e.geometry.radius < reach
+                   for cx, cy in centers)
+
+    fillet(m, 'Lid', 'LID_BOSS_FILLET', boss_root, 'Lid boss fillets', tangent_chain=False)
 
     s = Sketch(m, 'xy', 'Lid screw holes')
     for x, y in BOARD_HOLES:
