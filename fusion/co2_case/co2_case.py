@@ -101,6 +101,7 @@ PARAMS = [
     ('BUTTON_BODY', '12.4 mm', 'Pocket for the body'),
     ('BUTTON_FRAME', '1.3 mm', 'Frame wall'),
     ('BUTTON_FRAME_DEPTH', '4 mm', 'Frame depth'),
+    ('BUTTON_SLOT', '8 mm', 'Slots in the frame sides for the legs and the cap rim'),
     ('BUTTON_STACK', '12.5 mm', 'Body bottom to cap top, without legs'),
     ('BUTTON_PROTRUDE', '4 mm - LID', 'Cap above the lid: 4 mm cap above its rim, rim under the lid'),
     ('BUTTON_PEDESTAL', '8 mm', 'Pedestal under the body, leaves room for the legs'),
@@ -110,7 +111,7 @@ PARAMS = [
     ('BUZZER_D', '12.4 mm', 'Buzzer ring inner diameter'),
     ('BUZZER_RING', '1.3 mm', 'Buzzer ring wall'),
     ('BUZZER_RING_DEPTH', '4 mm', 'Buzzer ring depth'),
-    ('GRILLE_D', '1.6 mm', 'Grille hole diameter'),
+    ('GRILLE_D', '2.2 mm', 'Grille hole diameter'),
     ('GRILLE_R', '3 mm', 'Grille hole offset from the center'),
     # LEDs, 5 mm
     ('LED_X', '31 mm', 'LEDs center X'),
@@ -653,7 +654,8 @@ def build_lid(m):
     vent = s.extrude(CUT, 'z', *through, body='Lid')
     pattern_x(m, vent, 'LID_VENT_COUNT', 'VENT_STEP', 'Sensor vents')
 
-    # Button: square frame holding the body, round hole for the cap
+    # Button: frame holding the body by the corners, round hole for the cap.
+    # Slots in every side leave room for the legs and the round cap rim.
     frame_z = 'LID_Z - BUTTON_FRAME_DEPTH'
     s = Sketch(m, 'xy', 'Button frame')
     s.rect(X('BUTTON_X - BUTTON_BODY / 2 - BUTTON_FRAME'), Y('BUTTON_Y - BUTTON_BODY / 2 - BUTTON_FRAME'),
@@ -662,6 +664,15 @@ def build_lid(m):
 
     s = Sketch(m, 'xy', 'Button pocket')
     s.rect(X('BUTTON_X - BUTTON_BODY / 2'), Y('BUTTON_Y - BUTTON_BODY / 2'), 'BUTTON_BODY', 'BUTTON_BODY')
+    s.extrude(CUT, 'z', frame_z + ' - 0.1 mm', 'BUTTON_FRAME_DEPTH + 0.1 mm', body='Lid')
+
+    frame_out = 'BUTTON_BODY + 2 * BUTTON_FRAME'
+    s = Sketch(m, 'xy', 'Button slots X')
+    s.rect(X('BUTTON_X - ({}) / 2'.format(frame_out)), Y('BUTTON_Y - BUTTON_SLOT / 2'), frame_out, 'BUTTON_SLOT')
+    s.extrude(CUT, 'z', frame_z + ' - 0.1 mm', 'BUTTON_FRAME_DEPTH + 0.1 mm', body='Lid')
+
+    s = Sketch(m, 'xy', 'Button slots Y')
+    s.rect(X('BUTTON_X - BUTTON_SLOT / 2'), Y('BUTTON_Y - ({}) / 2'.format(frame_out)), 'BUTTON_SLOT', frame_out)
     s.extrude(CUT, 'z', frame_z + ' - 0.1 mm', 'BUTTON_FRAME_DEPTH + 0.1 mm', body='Lid')
 
     s = Sketch(m, 'xy', 'Button hole')
