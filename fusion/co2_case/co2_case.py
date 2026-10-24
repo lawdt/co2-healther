@@ -259,6 +259,28 @@ class Sketch:
         self._dim(pa, pb, self.u_orient, du, duv, self._text(b.asVector().asPoint(), 0, 0.3))
         self._dim(pa, pb, self.v_orient, dv, dvv, self._text(b.asVector().asPoint(), 0.3, 0))
 
+    def poly(self, points):
+        """Closed polygon; every vertex is dimensioned from the origin."""
+        lines = self.sk.sketchCurves.sketchLines
+        o = self.sk.originPoint
+        vals = [(self.m.val(u), self.m.val(v)) for u, v in points]
+        pts = [self.to_sketch(u, v, self._jitter()) for u, v in vals]
+        first = prev = None
+        sketch_pts = []
+        for i, p in enumerate(pts):
+            if i == 0:
+                continue
+            line = lines.addByTwoPoints(prev if prev is not None else pts[0], p)
+            if first is None:
+                first = line.startSketchPoint
+                sketch_pts.append(first)
+            prev = line.endSketchPoint
+            sketch_pts.append(prev)
+        lines.addByTwoPoints(prev, first)
+        for sp, (u, v), (uv, vv), p in zip(sketch_pts, points, vals, pts):
+            self._dim(o, sp, self.u_orient, u, uv, self._text(p, 0, -0.3))
+            self._dim(o, sp, self.v_orient, v, vv, self._text(p, -0.3, 0))
+
     def circle(self, uc, vc, d):
         ucv, vcv, dv = (self.m.val(e) for e in (uc, vc, d))
         c = self.to_sketch(ucv, vcv, self._jitter())
@@ -384,12 +406,24 @@ def build_base(m):
         s.circle(x, y, 'STANDOFF_PILOT')
     s.extrude(CUT, 'z', Z('UNDER - STANDOFF_PILOT_DEPTH'), 'STANDOFF_PILOT_DEPTH + 0.1 mm', body='Base')
 
-    # USB-C: obround matching the receptacle
+    # USB-C: obround matching the receptacle. The top corners are replaced by 45 degree
+    # chamfers that enclose the arcs, so the wall prints without steep overhangs
     s = Sketch(m, 'yz', 'USB opening')
     yc, zc = 'BOARD_Y + USB_Y', 'UNDER + PCB_T / 2 + USB_Z_OFF'
     s.rect(Y('{} - (USB_W - USB_H) / 2'.format(yc)), Z('{} - USB_H / 2'.format(zc)), 'USB_W - USB_H', 'USB_H')
     s.circle(Y('{} - (USB_W - USB_H) / 2'.format(yc)), Z(zc), 'USB_H')
     s.circle(Y('{} + (USB_W - USB_H) / 2'.format(yc)), Z(zc), 'USB_H')
+    # Vertical sides rise (sqrt(2) - 1) * r above the center before the chamfer starts
+    rise = 'USB_H / 2 * (sqrt(2) - 1)'
+    run_in = 'USB_H / 2 - {}'.format(rise)
+    s.poly([
+        (Y('{} - USB_W / 2'.format(yc)), Z(zc)),
+        (Y('{} + USB_W / 2'.format(yc)), Z(zc)),
+        (Y('{} + USB_W / 2'.format(yc)), Z('{} + {}'.format(zc, rise))),
+        (Y('{} + USB_W / 2 - ({})'.format(yc, run_in)), Z('{} + USB_H / 2'.format(zc))),
+        (Y('{} - USB_W / 2 + ({})'.format(yc, run_in)), Z('{} + USB_H / 2'.format(zc))),
+        (Y('{} - USB_W / 2'.format(yc)), Z('{} + {}'.format(zc, rise))),
+    ])
     s.extrude(CUT, 'x', 'WALL + INNER_L - 0.5 mm', 'WALL + 1 mm', body='Base')
 
     # SCD41: posts under the board corners and L-shaped retaining corners
