@@ -39,7 +39,7 @@ PARAMS = [
     ('BOARD_SIDE_GAP', '0.5 mm', 'Gap at board long edges'),
     ('HOLE_INSET', '2.5 mm', 'Mounting hole center from board edges'),
     ('STANDOFF_D', '7.5 mm', 'Standoff diameter'),
-    ('STANDOFF_D_RB', '6 mm', 'Lower right standoff, next to a resistor under the board'),
+    ('STANDOFF_NOTCH', '2.3 mm', 'Lower right standoff: corner toward the board center cut from this offset'),
     ('STANDOFF_WEB_W', '3 mm', 'Web from each standoff to the walls'),
     ('STANDOFF_PILOT', '3.8 mm', 'Hole for M3x5x4.2 heat-set insert'),
     ('STANDOFF_PILOT_DEPTH', '6 mm', 'Insert hole depth'),
@@ -387,10 +387,17 @@ def build_base(m):
 
     holes = BOARD_HOLES
     s = Sketch(m, 'xy', 'Standoffs')
-    for i, (x, y) in enumerate(holes):
-        # A resistor sits under the board next to the lower right hole
-        s.circle(x, y, 'STANDOFF_D_RB' if i == 1 else 'STANDOFF_D')
+    for x, y in holes:
+        s.circle(x, y, 'STANDOFF_D')
     s.extrude(JOIN, 'z', 'FLOOR', 'UNDER', body='Base')
+
+    # A part sits under the board diagonally inward from the lower right hole:
+    # cut that corner of the standoff, keep the full wall around the insert elsewhere
+    hx, hy = 'BOARD_X + BOARD_L - HOLE_INSET', 'BOARD_Y + HOLE_INSET'
+    s = Sketch(m, 'xy', 'Standoff notch')
+    s.rect(X('{} - STANDOFF_D / 2 - 0.5 mm'.format(hx)), Y('{} + STANDOFF_NOTCH'.format(hy)),
+           'STANDOFF_D / 2 + 0.5 mm - STANDOFF_NOTCH', 'STANDOFF_D / 2 + 0.5 mm - STANDOFF_NOTCH')
+    s.extrude(CUT, 'z', 'FLOOR', 'UNDER + 0.1 mm', body='Base')
 
     # Full-height webs tie every standoff to the nearest long wall and to the partition
     # or the end wall; under the board they stay inside the standoff circle
