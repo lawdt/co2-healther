@@ -78,6 +78,10 @@ PARAMS = [
     ('BACK_VENT_COUNT', '6', 'Vents in the back wall'),
     ('BACK_VENT_Z0', '2.5 mm', 'Back vents bottom above the floor'),
     ('BACK_VENT_H', '6 mm', 'Back vents height'),
+    ('BOARD_VENT_COUNT', '8', 'Vents in each long wall of the board compartment'),
+    ('BOARD_VENT_STEP', '5 mm', 'Board vent pitch'),
+    ('BOARD_VENT_Z0', '1.5 mm', 'Board vents bottom above the floor'),
+    ('BOARD_VENT_H', '5 mm', 'Board vents height, below the lid lip'),
     ('LID_VENT_COUNT', '5', 'Vents in the lid above the sensor'),
     ('LID_VENT_INSET', '2.5 mm', 'Lid vents inset from sensor board edges'),
     # Button, 12x12 tactile switch with an 11.5 mm cap
@@ -397,6 +401,15 @@ def build_base(m):
     s.rect(X(first), Z('BACK_VENT_Z0'), 'VENT_W', 'BACK_VENT_H')
     vent = s.extrude(CUT, 'y', 'WALL + INNER_W - 0.5 mm', 'WALL + 1 mm', body='Base')
     pattern_x(m, vent, 'BACK_VENT_COUNT', 'VENT_STEP', 'Back vents')
+
+    # Board compartment vents in both long walls: when the box hangs on the wall,
+    # air comes in through the lower wall and leaves through the upper one
+    first = 'BOARD_X + BOARD_L / 2 - (BOARD_VENT_COUNT - 1) * BOARD_VENT_STEP / 2 - VENT_W / 2'
+    for wall, start in (('lower', '-0.5 mm'), ('upper', 'WALL + INNER_W - 0.5 mm')):
+        s = Sketch(m, 'xz', 'Board vent {}'.format(wall))
+        s.rect(X(first), Z('BOARD_VENT_Z0'), 'VENT_W', 'BOARD_VENT_H')
+        vent = s.extrude(CUT, 'y', start, 'WALL + 1 mm', body='Base')
+        pattern_x(m, vent, 'BOARD_VENT_COUNT', 'BOARD_VENT_STEP', 'Board vents {}'.format(wall))
 
     # Floor slots for the tenons of the separately printed hooks and peg
     c = 'SLOT_CLEAR'
