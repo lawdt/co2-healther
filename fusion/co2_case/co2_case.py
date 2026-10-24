@@ -41,6 +41,11 @@ PARAMS = [
     ('STANDOFF_D', '7.5 mm', 'Standoff diameter'),
     ('STANDOFF_PILOT', '3.8 mm', 'Hole for M3x5x4.2 heat-set insert'),
     ('STANDOFF_PILOT_DEPTH', '6 mm', 'Insert hole depth'),
+    # Lid screws M3x10 ISO 7380 through the lid and the board into the inserts
+    ('LID_BOSS_D', '6 mm', 'Boss under the lid pressing on the board'),
+    ('LID_SCREW_HOLE', '3.4 mm', 'Clearance hole for M3'),
+    ('LID_CB_D', '6.4 mm', 'Counterbore for the ISO 7380 head (5.7 mm)'),
+    ('LID_CB_DEPTH', '1.8 mm', 'Counterbore depth, head flush with the lid'),
     # OLED visible area relative to the board, USB edge on the right
     ('OLED_FROM_RIGHT', '7 mm', 'Visible area to the USB-side board edge'),
     ('OLED_FROM_BOTTOM', '12 mm', 'Visible area to the bottom board edge'),
@@ -344,10 +349,7 @@ def build_base(m):
     s.rect(X('BAY_L - 0.5 mm'), Y('INNER_W / 2 - PART_NOTCH_W / 2'), 'PARTITION + 1 mm', 'PART_NOTCH_W')
     s.extrude(CUT, 'z', 'FLOOR', 'INNER_H + 1 mm', body='Base')
 
-    holes = [(X('BOARD_X + HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
-             (X('BOARD_X + BOARD_L - HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
-             (X('BOARD_X + HOLE_INSET'), Y('BOARD_Y + BOARD_W - HOLE_INSET')),
-             (X('BOARD_X + BOARD_L - HOLE_INSET'), Y('BOARD_Y + BOARD_W - HOLE_INSET'))]
+    holes = BOARD_HOLES
     s = Sketch(m, 'xy', 'Standoffs')
     for x, y in holes:
         s.circle(x, y, 'STANDOFF_D')
@@ -419,6 +421,11 @@ def build_base(m):
     s.rect('PEG_CX - PEG_W / 2 - {}'.format(c), 'PEG_Y - {}'.format(c), 'PEG_W + 2 * {}'.format(c), 'PEG_H + 2 * {}'.format(c))
     s.extrude(CUT, 'z', '-0.1 mm', 'FLOOR + 0.2 mm', body='Base')
 
+
+BOARD_HOLES = [(X('BOARD_X + HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
+               (X('BOARD_X + BOARD_L - HOLE_INSET'), Y('BOARD_Y + HOLE_INSET')),
+               (X('BOARD_X + HOLE_INSET'), Y('BOARD_Y + BOARD_W - HOLE_INSET')),
+               (X('BOARD_X + BOARD_L - HOLE_INSET'), Y('BOARD_Y + BOARD_W - HOLE_INSET'))]
 
 # SKADIS hooks 40 mm apart; the peg goes into the staggered slot row between and below them
 HOOK_X = ['HOOK_CX - SKADIS_PITCH / 2 - HOOK_W / 2', 'HOOK_CX + SKADIS_PITCH / 2 - HOOK_W / 2']
@@ -505,6 +512,23 @@ def build_lid(m):
     s.rect(X('INNER_L - FIT - LIP_T - 0.5 mm'), Y('BOARD_Y + USB_Y - USB_W / 2 - USB_LIP_GAP'),
            'FIT + LIP_T + 0.5 mm', 'USB_W + 2 * USB_LIP_GAP')
     s.extrude(CUT, 'z', 'LID_Z - LIP_H - 0.1 mm', 'LIP_H + 0.1 mm', body='Lid')
+
+    # Lid screws go through the board mounting holes into the standoff inserts;
+    # bosses under the lid clamp the board, so the same four screws hold both
+    s = Sketch(m, 'xy', 'Lid bosses')
+    for x, y in BOARD_HOLES:
+        s.circle(x, y, 'LID_BOSS_D')
+    s.extrude(JOIN, 'z', Z('UNDER + PCB_T'), 'TOP_CLEAR', body='Lid')
+
+    s = Sketch(m, 'xy', 'Lid screw holes')
+    for x, y in BOARD_HOLES:
+        s.circle(x, y, 'LID_SCREW_HOLE')
+    s.extrude(CUT, 'z', Z('UNDER + PCB_T') + ' - 0.1 mm', 'TOP_CLEAR + LID + 0.2 mm', body='Lid')
+
+    s = Sketch(m, 'xy', 'Lid counterbores')
+    for x, y in BOARD_HOLES:
+        s.circle(x, y, 'LID_CB_D')
+    s.extrude(CUT, 'z', 'LID_Z + LID - LID_CB_DEPTH', 'LID_CB_DEPTH + 0.1 mm', body='Lid')
 
     # Tongue that closes the partition notch over the wire channel
     s = Sketch(m, 'xy', 'Partition tongue')
