@@ -34,6 +34,12 @@
 #define CO2_ALERT_OFF 1000
 #define ALERT_MIN_INTERVAL_MS (5UL * 60 * 1000)
 
+// Button to GND: short press toggles sound, long press toggles the display
+#define BUTTON_PIN 0
+#define BUTTON_DEBOUNCE_MS 30
+#define BUTTON_LONG_MS 1000
+#define TOAST_MS 1500
+
 #define LED_YELLOW_PIN 5
 #define LED_RED_PIN 4
 #define CO2_WARN 1000
@@ -69,8 +75,11 @@ uint32_t warmupStart = 0;
 bool alertActive = false;
 bool alertBeeped = false;
 uint32_t lastAlertBeep = 0;
-// Runtime mute switch, toggled over MQTT and kept in EEPROM
+// Runtime mute switch, toggled over MQTT or the button and kept in EEPROM
 bool buzzerEnabled = false;
+bool displayOn = true;
+const char *toastText = nullptr;
+uint32_t toastStart = 0;
 
 // Last entry is the bar still being filled, updated on every sample
 uint16_t history[BAR_COUNT];
@@ -149,6 +158,54 @@ void updateLeds() {
   digitalWrite(LED_RED_PIN, redOn);
 }
 
+void showToast(const char *text) {
+  toastText = text;
+  toastStart = millis();
+}
+
+void toggleSound() {
+  buzzerEnabled = !buzzerEnabled;
+  saveSettings();
+  publishBuzzerState();
+  Serial.printf("Button: sound %s\n", buzzerEnabled ? "on" : "off");
+  showToast(buzzerEnabled ? "sound on" : "sound off");
+  drawScreen();
+  beep(30);
+}
+
+void toggleDisplay() {
+  displayOn = !displayOn;
+  Serial.printf("Button: display %s\n", displayOn ? "on" : "off");
+  display.ssd1306_command(displayOn ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
+  if (displayOn) drawScreen();
+}
+
+// Long press fires as soon as it is held long enough; short press fires on release
+void handleButton() {
+  static bool lastRaw = HIGH, pressed = false, longDone = false;
+  static uint32_t changedAt = 0, pressedAt = 0;
+
+  bool raw = digitalRead(BUTTON_PIN);
+  if (raw != lastRaw) {
+    lastRaw = raw;
+    changedAt = millis();
+  }
+  if (millis() - changedAt < BUTTON_DEBOUNCE_MS) return;
+
+  bool down = lastRaw == LOW;
+  if (!pressed && down) {
+    pressed = true;
+    longDone = false;
+    pressedAt = millis();
+  } else if (pressed && down && !longDone && millis() - pressedAt >= BUTTON_LONG_MS) {
+    longDone = true;
+    toggleDisplay();
+  } else if (pressed && !down) {
+    pressed = false;
+    if (!longDone) toggleSound();
+  }
+}
+
 void printError(const char *what, int16_t error) {
   char msg[64];
   errorToString(error, msg, sizeof(msg));
@@ -160,6 +217,7 @@ void drawHeader(const char *title) {
   display.setCursor(0, 4);
   display.print(title);
   drawWifiIcon(52, 2);
+  if (!buzzerEnabled) drawMuteIcon(66, 3);
   if (alertActive) {
     display.setCursor(SCREEN_WIDTH - 6 * 4, 4);
     display.print("HIGH");
@@ -188,6 +246,14 @@ void drawWifiIcon(int x, int y) {
       display.drawFastHLine(bx, y + 9, 2, SSD1306_WHITE);
     }
   }
+}
+
+// 11x9 speaker with a cross
+void drawMuteIcon(int x, int y) {
+  display.fillRect(x, y + 3, 2, 3, SSD1306_WHITE);
+  display.fillTriangle(x + 2, y + 4, x + 5, y, x + 5, y + 8, SSD1306_WHITE);
+  display.drawLine(x + 7, y + 2, x + 10, y + 6, SSD1306_WHITE);
+  display.drawLine(x + 10, y + 2, x + 7, y + 6, SSD1306_WHITE);
 }
 
 // 13x13 warning triangle with an exclamation mark cut out
@@ -260,7 +326,24 @@ void logTimeOnce() {
   Serial.printf("Time synced: %02d:%02d, %s mode\n", local.tm_hour, local.tm_min, isNight() ? "night" : "day");
 }
 
+void drawToast() {
+  if (!toastText) return;
+  if (millis() - toastStart >= TOAST_MS) {
+    toastText = nullptr;
+    return;
+  }
+  int w = 6 * strlen(toastText) + 12;
+  int x = (SCREEN_WIDTH - w) / 2;
+  int y = HEADER_HEIGHT + 10;
+  display.fillRect(x, y, w, 18, SSD1306_BLACK);
+  display.drawRect(x, y, w, 18, SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(x + 6, y + 5);
+  display.print(toastText);
+}
+
 void drawScreen() {
+  if (!displayOn) return;
   updateContrast();
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -291,6 +374,7 @@ void drawScreen() {
 
     drawGraph();
   }
+  drawToast();
   display.display();
 }
 
@@ -328,6 +412,7 @@ void setup() {
   digitalWrite(BUZZER_PIN, LOW);
   pinMode(LED_YELLOW_PIN, OUTPUT);
   pinMode(LED_RED_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // Wi-Fi for NTP time and MQTT; connects in the background
   WiFi.mode(WIFI_STA);
@@ -353,6 +438,7 @@ void setup() {
 }
 
 void loop() {
+  handleButton();
   updateLeds();
   mqttLoop();
 
