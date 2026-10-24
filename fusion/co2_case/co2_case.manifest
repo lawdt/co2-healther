@@ -1,0 +1,10 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "CO2 monitor enclosure: base and lid"
+  },
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}
