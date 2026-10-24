@@ -57,7 +57,7 @@ PARAMS = [
     ('OLED_H', '13 mm', 'Visible area height'),
     ('WINDOW_MARGIN', '0.5 mm', 'Display window margin'),
     ('BEZEL_MARGIN', '1.5 mm', 'Bezel margin around the window'),
-    ('BEZEL_DEPTH', '1 mm', 'Bezel depth'),
+    ('WINDOW_TAPER', '-atan((BEZEL_MARGIN - WINDOW_MARGIN) / LID)', 'Slope of the display window walls', 'deg'),
     # USB-C receptacle opening (8.94 x 3.26 receptacle + clearance)
     ('USB_Y', '11 mm', 'USB center from the bottom board edge'),
     ('USB_W', '9.6 mm', 'USB opening width'),
@@ -268,7 +268,7 @@ class Sketch:
         dim = self.sk.sketchDimensions.addDiameterDimension(circ, self._text(c, dv, dv))
         dim.parameter.expression = d
 
-    def extrude(self, op, axis, start, length, direction=1, body=None, name=None, only=None):
+    def extrude(self, op, axis, start, length, direction=1, body=None, name=None, only=None, taper=None):
         """Extrude profiles along the model axis from coordinate `start`.
 
         All profiles by default; `only` filters them, e.g. to skip the
@@ -288,9 +288,11 @@ class Sketch:
             adsk.core.ValueInput.createByString(start_expr))
         extent_dir = (adsk.fusion.ExtentDirections.PositiveExtentDirection if n * direction > 0
                       else adsk.fusion.ExtentDirections.NegativeExtentDirection)
-        inp.setOneSideExtent(
-            adsk.fusion.DistanceExtentDefinition.create(adsk.core.ValueInput.createByString(length)),
-            extent_dir)
+        extent = adsk.fusion.DistanceExtentDefinition.create(adsk.core.ValueInput.createByString(length))
+        if taper is None:
+            inp.setOneSideExtent(extent, extent_dir)
+        else:
+            inp.setOneSideExtent(extent, extent_dir, adsk.core.ValueInput.createByString(taper))
         if body is not None:
             names = body if isinstance(body, (list, tuple)) else [body]
             inp.participantBodies = [self.m.body(n) for n in names]
@@ -320,8 +322,9 @@ def pattern_x(m, feature, count, spacing, name):
 
 def add_params(design):
     params = design.userParameters
-    for name, expr, comment in PARAMS:
-        units = '' if expr.strip().replace('.', '').isdigit() else 'mm'
+    for item in PARAMS:
+        name, expr, comment = item[:3]
+        units = item[3] if len(item) > 3 else ('' if expr.strip().replace('.', '').isdigit() else 'mm')
         existing = params.itemByName(name)
         if existing:
             existing.expression = expr
@@ -598,15 +601,13 @@ def build_lid(m):
 
     through = ('LID_Z - 0.1 mm', 'LID + 0.2 mm')
 
+    # Display window: bezel size on the outside, window size at the underside, sloped walls
+    # so the lid prints face down without supports
     s = Sketch(m, 'xy', 'Display window')
-    s.rect(X('OLED_X - WINDOW_MARGIN'), Y('OLED_Y - WINDOW_MARGIN'),
-           'OLED_W + 2 * WINDOW_MARGIN', 'OLED_H + 2 * WINDOW_MARGIN')
-    s.extrude(CUT, 'z', *through, body='Lid')
-
-    s = Sketch(m, 'xy', 'Display bezel')
     s.rect(X('OLED_X - BEZEL_MARGIN'), Y('OLED_Y - BEZEL_MARGIN'),
            'OLED_W + 2 * BEZEL_MARGIN', 'OLED_H + 2 * BEZEL_MARGIN')
-    s.extrude(CUT, 'z', 'LID_Z + LID - BEZEL_DEPTH', 'BEZEL_DEPTH + 0.1 mm', body='Lid')
+    s.extrude(CUT, 'z', 'LID_Z + LID', 'LID + 0.1 mm', direction=-1, body='Lid',
+              taper='WINDOW_TAPER')
 
     s = Sketch(m, 'xy', 'Sensor vent')
     first = 'SENSOR_X + SENSOR_L / 2 - (LID_VENT_COUNT - 1) * VENT_STEP / 2 - VENT_W / 2'
