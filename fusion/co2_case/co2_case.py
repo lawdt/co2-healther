@@ -130,7 +130,7 @@ PARAMS = [
     ('HOOK_FLANGE_L', '10 mm', 'Flange length against the back of the base'),
     ('HOOK_FLANGE_T', '1.5 mm', 'Flange thickness'),
     ('HOOK_R', '1 mm', 'Rounding of the hook and peg edges'),
-    ('SLOT_CLEAR', '0.15 mm', 'Floor slot clearance around the tenons'),
+    ('SLOT_CLEAR', '0.2 mm', 'Floor slot clearance around the tenons'),
     ('PEG_W', '4.4 mm', 'Locating peg width across the slot'),
     ('PEG_H', '5 mm', 'Locating peg height along the slot'),
     ('PEG_LEN', '4 mm', 'Locating peg length, below the pegboard thickness'),
