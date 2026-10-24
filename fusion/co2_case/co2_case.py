@@ -36,7 +36,7 @@ PARAMS = [
     ('UNDER', '5 mm', 'Room under the board for solder joints'),
     ('TOP_CLEAR', '4.5 mm', 'Board top to lid underside'),
     ('BOARD_GAP', '0.5 mm', 'Gap at board short edges'),
-    ('BOARD_SIDE_GAP', '1.6 mm', 'Gap at board long edges'),
+    ('BOARD_SIDE_GAP', '0.5 mm', 'Gap at board long edges'),
     ('HOLE_INSET', '2.5 mm', 'Mounting hole center from board edges'),
     ('STANDOFF_D', '7.5 mm', 'Standoff diameter'),
     ('STANDOFF_D_RB', '6 mm', 'Lower right standoff, next to a resistor under the board'),
@@ -79,7 +79,6 @@ PARAMS = [
     ('SENSOR_L', '21.8 mm', 'Sensor board length'),
     ('SENSOR_W', '13.8 mm', 'Sensor board width'),
     ('SENSOR_X', '3 mm', 'Sensor board corner X'),
-    ('SENSOR_Y', '19.5 mm', 'Sensor board corner Y'),
     ('SENSOR_RAISE', '2 mm', 'Posts under the sensor board'),
     ('SENSOR_POST', '3 mm', 'Post size'),
     ('SENSOR_FIT', '0.3 mm', 'Sensor board clearance'),
@@ -119,8 +118,6 @@ PARAMS = [
     ('GRILLE_R', '3 mm', 'Grille hole offset from the center'),
     # LEDs, 5 mm
     ('LED_X', '31 mm', 'LEDs center X'),
-    ('LED_RED_Y', '23 mm', 'Red LED center Y'),
-    ('LED_YELLOW_Y', '29 mm', 'Yellow LED center Y'),
     ('LED_HOLE', '5.2 mm', 'LED hole'),
     # IKEA SKADIS hooks: 5 x 15 mm slots, 40 mm apart in a row, 5 mm board
     ('SKADIS_PITCH', '40 mm', 'Distance between the hooks'),
@@ -142,6 +139,9 @@ PARAMS = [
     ('PEG_GAP', '0.5 mm', 'Peg clearance above the slot bottom'),
     # Derived
     ('INNER_W', 'BOARD_W + 2 * BOARD_SIDE_GAP', 'Inner width'),
+    ('SENSOR_Y', 'INNER_W - SENSOR_W - SENSOR_FIT', 'Sensor board corner Y, against the back wall'),
+    ('LED_YELLOW_Y', 'INNER_W - 5 mm', 'Yellow LED center Y, rim clear of the lid lip'),
+    ('LED_RED_Y', 'LED_YELLOW_Y - 6 mm', 'Red LED center Y'),
     ('BOARD_X', 'BAY_L + PARTITION + BOARD_GAP', 'Board left edge'),
     ('BOARD_Y', 'BOARD_SIDE_GAP', 'Board bottom edge'),
     ('INNER_L', 'BOARD_X + BOARD_L + BOARD_GAP', 'Inner length'),
@@ -601,9 +601,14 @@ def build_lid(m):
 
     def boss_part(p):
         c = s.sk.sketchToModelSpace(p.areaProperties().centroid)
+        lo = s.sk.sketchToModelSpace(p.boundingBox.minPoint)
+        hi = s.sk.sketchToModelSpace(p.boundingBox.maxPoint)
         inside = lambda b: b[0] < c.x < b[2] and b[1] < c.y < b[3]
+        # whole profile within the compartment: an L-shaped piece around a corner has its centroid inside
+        within = comp_box[0] - 1e-4 < lo.x and hi.x < comp_box[2] + 1e-4 and \
+            comp_box[1] - 1e-4 < lo.y and hi.y < comp_box[3] + 1e-4
         near = any((c.x - cx) ** 2 + (c.y - cy) ** 2 < radius ** 2 for cx, cy in centers)
-        return near and inside(comp_box) and not inside(usb_box)
+        return near and within and not inside(usb_box)
 
     s.extrude(JOIN, 'z', boss_z, 'TOP_CLEAR', body='Lid', only=boss_part)
 
