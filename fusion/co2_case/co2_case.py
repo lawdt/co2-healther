@@ -373,7 +373,7 @@ def build_base(m):
     s.extrude(JOIN, 'z', 'FLOOR', 'SENSOR_RAISE', body='Base')
 
     s = Sketch(m, 'xy', 'Sensor corners')
-    outer = 'SENSOR_FIT + SENSOR_WALL'
+    outer = '(SENSOR_FIT + SENSOR_WALL)'
     for cx, cy, dx, dy in corners:
         x_out = '{} - {}'.format(cx, outer) if dx > 0 else '{} + SENSOR_FIT'.format(cx)
         y_out = '{} - {}'.format(cy, outer) if dy > 0 else '{} + SENSOR_FIT'.format(cy)
