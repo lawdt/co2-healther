@@ -39,6 +39,8 @@ PARAMS = [
     ('BOARD_SIDE_GAP', '1.6 mm', 'Gap at board long edges'),
     ('HOLE_INSET', '2.5 mm', 'Mounting hole center from board edges'),
     ('STANDOFF_D', '7.5 mm', 'Standoff diameter'),
+    ('STANDOFF_D_RB', '6 mm', 'Lower right standoff, next to a resistor under the board'),
+    ('STANDOFF_WEB_W', '3 mm', 'Web from each standoff to the walls'),
     ('STANDOFF_PILOT', '3.8 mm', 'Hole for M3x5x4.2 heat-set insert'),
     ('STANDOFF_PILOT_DEPTH', '6 mm', 'Insert hole depth'),
     # Lid screws M3x10 ISO 7380 through the lid and the board into the inserts
@@ -354,8 +356,23 @@ def build_base(m):
 
     holes = BOARD_HOLES
     s = Sketch(m, 'xy', 'Standoffs')
-    for x, y in holes:
-        s.circle(x, y, 'STANDOFF_D')
+    for i, (x, y) in enumerate(holes):
+        # A resistor sits under the board next to the lower right hole
+        s.circle(x, y, 'STANDOFF_D_RB' if i == 1 else 'STANDOFF_D')
+    s.extrude(JOIN, 'z', 'FLOOR', 'UNDER', body='Base')
+
+    # Full-height webs tie every standoff to the nearest long wall and to the partition
+    # or the end wall; under the board they stay inside the standoff circle
+    hx0, hx1 = 'BOARD_X + HOLE_INSET', 'BOARD_X + BOARD_L - HOLE_INSET'
+    hy0, hy1 = 'BOARD_Y + HOLE_INSET', 'BOARD_Y + BOARD_W - HOLE_INSET'
+    half = 'STANDOFF_WEB_W / 2'
+    s = Sketch(m, 'xy', 'Standoff webs')
+    for hx in (hx0, hx1):
+        s.rect(X('{} - {}'.format(hx, half)), Y('0 mm'), 'STANDOFF_WEB_W', hy0)
+        s.rect(X('{} - {}'.format(hx, half)), Y(hy1), 'STANDOFF_WEB_W', 'INNER_W - ({})'.format(hy1))
+    for hy in (hy0, hy1):
+        s.rect(X('BAY_L + PARTITION'), Y('{} - {}'.format(hy, half)), '{} - BAY_L - PARTITION'.format(hx0), 'STANDOFF_WEB_W')
+        s.rect(X(hx1), Y('{} - {}'.format(hy, half)), 'INNER_L - ({})'.format(hx1), 'STANDOFF_WEB_W')
     s.extrude(JOIN, 'z', 'FLOOR', 'UNDER', body='Base')
 
     s = Sketch(m, 'xy', 'Standoff pilots')
