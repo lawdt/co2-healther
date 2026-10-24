@@ -25,6 +25,7 @@ PARAMS = [
     ('FLOOR', '2 mm', 'Base floor thickness'),
     ('LID', '2 mm', 'Lid plate thickness'),
     ('FIT', '0.2 mm', 'Clearance between lid lip and walls'),
+    ('CORNER_R', '3 mm', 'Outer vertical corner radius'),
     ('LIP_H', '3 mm', 'Lid lip height'),
     ('LIP_T', '1.2 mm', 'Lid lip thickness'),
     ('LIP_NOTCH_CLEAR', '0.3 mm', 'Clearance under the lip in the partition notches'),
@@ -423,6 +424,23 @@ def fillet(m, body, radius, keep, name):
     return f
 
 
+def round_corners(m):
+    """Round the four vertical outer corners of the base and the lid."""
+    length, width = m.val('OUTER_L'), m.val('OUTER_W')
+    eps = 1e-4
+
+    def outer_vertical(e):
+        a, b = e.startVertex.geometry, e.endVertex.geometry
+        if abs(a.x - b.x) > eps or abs(a.y - b.y) > eps:
+            return False
+        on_x = abs(a.x) < eps or abs(a.x - length) < eps
+        on_y = abs(a.y) < eps or abs(a.y - width) < eps
+        return on_x and on_y
+
+    for body in ('Base', 'Lid'):
+        fillet(m, body, 'CORNER_R', outer_vertical, '{} corners'.format(body))
+
+
 def build_hangers(m):
     """Hooks and the peg print on their side without supports and get glued into the floor slots.
 
@@ -544,4 +562,5 @@ def run(_context):
     build_base(m)
     build_lid(m)
     build_hangers(m)
+    round_corners(m)
     app.activeViewport.fit()
