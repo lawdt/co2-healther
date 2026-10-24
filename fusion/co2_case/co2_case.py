@@ -58,9 +58,13 @@ PARAMS = [
     ('OLED_H', '13 mm', 'Visible area height'),
     ('WINDOW_MARGIN', '0.5 mm', 'Display window margin'),
     ('BEZEL_MARGIN', '1.5 mm', 'Bezel margin around the window'),
+    ('OLED_TOP', '2.4 mm', 'Display glass top above the board'),
+    ('OLED_SKIRT_GAP', '0.5 mm', 'Skirt bottom to the display glass'),
+    ('OLED_SKIRT_T', '1 mm', 'Skirt wall around the window'),
+    ('OLED_SKIRT_H', 'TOP_CLEAR - OLED_TOP - OLED_SKIRT_GAP', 'Skirt height under the lid'),
     ('WINDOW_TAPER', '-atan((BEZEL_MARGIN - WINDOW_MARGIN) / LID)', 'Slope of the display window walls', 'deg'),
     # USB-C receptacle opening (8.94 x 3.26 receptacle + clearance)
-    ('USB_Y', '11 mm', 'USB center from the bottom board edge'),
+    ('USB_Y', 'BOARD_W / 2', 'USB center from the bottom board edge'),
     ('USB_W', '9.6 mm', 'USB opening width'),
     ('USB_H', '3.8 mm', 'USB opening height'),
     ('USB_Z_OFF', 'PCB_T / 2 + 1.63 mm', 'USB center above the board mid-plane'),
@@ -647,6 +651,15 @@ def build_lid(m):
            'OLED_W + 2 * BEZEL_MARGIN', 'OLED_H + 2 * BEZEL_MARGIN')
     s.extrude(CUT, 'z', 'LID_Z + LID', 'LID + 0.1 mm', direction=-1, body='Lid',
               taper='WINDOW_TAPER')
+
+    # Skirt around the window down to the glass, hides the gap above the display
+    s = Sketch(m, 'xy', 'Display skirt')
+    s.rect(X('OLED_X - WINDOW_MARGIN - OLED_SKIRT_T'), Y('OLED_Y - WINDOW_MARGIN - OLED_SKIRT_T'),
+           'OLED_W + 2 * (WINDOW_MARGIN + OLED_SKIRT_T)', 'OLED_H + 2 * (WINDOW_MARGIN + OLED_SKIRT_T)')
+    s.rect(X('OLED_X - WINDOW_MARGIN'), Y('OLED_Y - WINDOW_MARGIN'),
+           'OLED_W + 2 * WINDOW_MARGIN', 'OLED_H + 2 * WINDOW_MARGIN')
+    s.extrude(JOIN, 'z', 'LID_Z - OLED_SKIRT_H', 'OLED_SKIRT_H', body='Lid',
+              only=lambda p: p.profileLoops.count == 2)
 
     s = Sketch(m, 'xy', 'Sensor vent')
     first = 'SENSOR_X + SENSOR_L / 2 - (LID_VENT_COUNT - 1) * VENT_STEP / 2 - VENT_W / 2'
