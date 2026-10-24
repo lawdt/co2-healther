@@ -116,7 +116,7 @@ PARAMS = [
     # LEDs, 5 mm
     ('LED_X', '31 mm', 'LEDs center X'),
     ('LED_RED_Y', '23 mm', 'Red LED center Y'),
-    ('LED_YELLOW_Y', '30 mm', 'Yellow LED center Y'),
+    ('LED_YELLOW_Y', '29 mm', 'Yellow LED center Y'),
     ('LED_HOLE', '5.2 mm', 'LED hole'),
     # IKEA SKADIS hooks: 5 x 15 mm slots, 40 mm apart in a row, 5 mm board
     ('SKADIS_PITCH', '40 mm', 'Distance between the hooks'),
