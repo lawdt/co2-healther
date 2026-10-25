@@ -103,7 +103,7 @@ void mqttLoop() {
   if (wifi != lastWifi) {
     lastWifi = wifi;
     Serial.printf("WiFi status %d", wifi);
-    if (wifi == WL_CONNECTED) Serial.printf(", IP %s, RSSI %d", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    if (wifi == WL_CONNECTED) Serial.printf(", %s, IP %s, RSSI %d", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
     Serial.println();
   }
   if (wifi != WL_CONNECTED) return;

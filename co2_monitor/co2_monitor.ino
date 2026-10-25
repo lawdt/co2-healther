@@ -8,6 +8,11 @@
 
 // Europe/Podgorica
 #define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"
+// Wi-Fi: scan for known networks and join the strongest one
+#define WIFI_CONNECT_TIMEOUT_MS 60000
+#ifndef WIFI_PASSWORD_2
+#define WIFI_PASSWORD_2 WIFI_PASSWORD
+#endif
 // Night mode: no beeps, no LEDs, no blinking
 #define NIGHT_FROM_HOUR 21
 #define NIGHT_TO_HOUR 9
@@ -111,6 +116,54 @@ void pushHistory(uint16_t value) {
     barSum = 0;
     barSamples = 0;
   }
+}
+
+struct WifiNetwork {
+  const char *ssid;
+  const char *password;
+};
+
+const WifiNetwork WIFI_NETWORKS[] = {
+  {WIFI_SSID, WIFI_PASSWORD},
+#ifdef WIFI_SSID_2
+  {WIFI_SSID_2, WIFI_PASSWORD_2},
+#endif
+};
+
+// While disconnected, scan in the background and join the known network with the best signal;
+// if it does not connect in time, scan again. A weak signal can take 30-40 s to join
+void wifiLoop() {
+  static uint32_t lastAttempt = 0;
+  static bool attempted = false;
+  if (WiFi.status() == WL_CONNECTED) return;
+  if (attempted && millis() - lastAttempt < WIFI_CONNECT_TIMEOUT_MS) return;
+
+  int8_t found = WiFi.scanComplete();
+  if (found == WIFI_SCAN_RUNNING) return;
+  if (found < 0) {
+    WiFi.scanNetworks(true);
+    return;
+  }
+
+  int best = -1;
+  const WifiNetwork *network = nullptr;
+  for (int i = 0; i < found; i++) {
+    for (const WifiNetwork &n : WIFI_NETWORKS) {
+      if (WiFi.SSID(i) == n.ssid && (best < 0 || WiFi.RSSI(i) > WiFi.RSSI(best))) {
+        best = i;
+        network = &n;
+      }
+    }
+  }
+  attempted = true;
+  lastAttempt = millis();
+  if (best < 0) {
+    Serial.println("WiFi: no known networks found");
+  } else {
+    Serial.printf("WiFi: joining %s, RSSI %d\n", network->ssid, WiFi.RSSI(best));
+    WiFi.begin(network->ssid, network->password);
+  }
+  WiFi.scanDelete();
 }
 
 // Until NTP time is known, stay quiet as if it were night
@@ -474,8 +527,8 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // Wi-Fi for NTP time and MQTT; connects in the background
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   configTime(TZ_INFO, "pool.ntp.org", "time.google.com");
   setupMqtt();
 
@@ -501,6 +554,7 @@ void setup() {
 void loop() {
   handleButton();
   updateLeds();
+  wifiLoop();
   mqttLoop();
 
   static uint32_t lastPoll = 0;
