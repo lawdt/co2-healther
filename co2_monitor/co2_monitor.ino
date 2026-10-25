@@ -258,8 +258,9 @@ void drawHeader(const char *title) {
   display.setTextSize(1);
   display.setCursor(0, 4);
   display.print(title);
-  drawWifiIcon(52, 2);
-  if (!buzzerEnabled) drawMuteIcon(66, 3);
+  drawWifiIcon(49, 2);
+  drawClockIcon(63, 3);
+  if (!buzzerEnabled) drawMuteIcon(75, 3);
   if (alertActive) {
     display.setCursor(SCREEN_WIDTH - 6 * 4, 4);
     display.print("HIGH");
@@ -288,6 +289,14 @@ void drawWifiIcon(int x, int y) {
       display.drawFastHLine(bx, y + 9, 2, SSD1306_WHITE);
     }
   }
+}
+
+// 9x9 clock; blinks until NTP time is known
+void drawClockIcon(int x, int y) {
+  if (time(nullptr) < 1700000000 && (millis() / 1000) % 2) return;
+  display.drawCircle(x + 4, y + 4, 4, SSD1306_WHITE);
+  display.drawFastVLine(x + 4, y + 2, 3, SSD1306_WHITE);
+  display.drawFastHLine(x + 4, y + 4, 3, SSD1306_WHITE);
 }
 
 // 11x9 speaker with a cross
