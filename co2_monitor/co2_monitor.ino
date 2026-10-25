@@ -18,9 +18,13 @@
 #define CONTRAST_DAY 200
 #define CONTRAST_NIGHT 1
 
-// HW-364A: onboard OLED wired to SDA=GPIO14 (D6), SCL=GPIO12 (D5)
+// HW-364A: onboard OLED wired to SDA=GPIO14 (D5), SCL=GPIO12 (D6)
 #define I2C_SDA 14
 #define I2C_SCL 12
+// SCD41 is soldered with SDA and SCL crossed relative to the OLED,
+// so the bus is switched to these pins around every sensor transaction
+#define SCD41_SDA I2C_SCL
+#define SCD41_SCL I2C_SDA
 #define OLED_ADDR 0x3C
 
 #define SCREEN_WIDTH 128
@@ -378,6 +382,14 @@ void drawScreen() {
   display.display();
 }
 
+void sensorBus() {
+  Wire.begin(SCD41_SDA, SCD41_SCL);
+}
+
+void displayBus() {
+  Wire.begin(I2C_SDA, I2C_SCL);
+}
+
 void setupSensor() {
   scd4x.begin(Wire, SCD41_I2C_ADDR_62);
 
@@ -432,7 +444,9 @@ void setup() {
   display.ssd1306_command(SSD1306_SETPRECHARGE);
   display.ssd1306_command(OLED_PRECHARGE);
 
+  sensorBus();
   setupSensor();
+  displayBus();
   drawScreen();
   beep(50);
 }
@@ -449,6 +463,7 @@ void loop() {
 
   if (sensorOk) {
     bool ready = false;
+    sensorBus();
     int16_t error = scd4x.getDataReadyStatus(ready);
     if (error) {
       printError("getDataReadyStatus", error);
@@ -471,6 +486,7 @@ void loop() {
         }
       }
     }
+    displayBus();
   }
 
   drawScreen();
