@@ -15,7 +15,7 @@
 #define MQTT_PUBLISH_MS 30000
 #define MQTT_RETRY_MS 10000
 
-// EEPROM layout: magic byte + buzzer flag
+// EEPROM layout: magic byte, buzzer flag, LEDs flag (0xFF on older layouts means on)
 #define EEPROM_MAGIC 0xC2
 
 WiFiClient net;
@@ -25,12 +25,14 @@ void loadSettings() {
   EEPROM.begin(4);
   if (EEPROM.read(0) == EEPROM_MAGIC) {
     buzzerEnabled = EEPROM.read(1);
+    ledsEnabled = EEPROM.read(2) != 0;
   }
 }
 
 void saveSettings() {
   EEPROM.write(0, EEPROM_MAGIC);
   EEPROM.write(1, buzzerEnabled);
+  EEPROM.write(2, ledsEnabled);
   EEPROM.commit();
 }
 

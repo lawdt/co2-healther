@@ -42,6 +42,8 @@
 #define BUTTON_PIN 0
 #define BUTTON_DEBOUNCE_MS 30
 #define BUTTON_LONG_MS 1000
+#define BUTTON_DOUBLE_MS 400
+#define LED_TEST_MS 1000
 #define TOAST_MS 1500
 
 #define LED_YELLOW_PIN 5
@@ -81,6 +83,9 @@ bool alertBeeped = false;
 uint32_t lastAlertBeep = 0;
 // Runtime mute switch, toggled over MQTT or the button and kept in EEPROM
 bool buzzerEnabled = false;
+bool ledsEnabled = true;
+uint32_t ledTestStart = 0;
+bool ledTest = false;
 bool displayOn = true;
 const char *toastText = nullptr;
 uint32_t toastStart = 0;
@@ -149,7 +154,14 @@ void updateLeds() {
     lastNightCheck = millis();
     night = isNight();
   }
-  if (night) {
+  // Both LEDs light up briefly when they are switched on, day or night
+  if (ledTest && millis() - ledTestStart < LED_TEST_MS) {
+    digitalWrite(LED_YELLOW_PIN, HIGH);
+    digitalWrite(LED_RED_PIN, HIGH);
+    return;
+  }
+  ledTest = false;
+  if (night || !ledsEnabled) {
     digitalWrite(LED_YELLOW_PIN, LOW);
     digitalWrite(LED_RED_PIN, LOW);
     return;
@@ -177,6 +189,18 @@ void toggleSound() {
   beep(30);
 }
 
+void toggleLeds() {
+  ledsEnabled = !ledsEnabled;
+  saveSettings();
+  Serial.printf("Button: leds %s\n", ledsEnabled ? "on" : "off");
+  showToast(ledsEnabled ? "leds on" : "leds off");
+  drawScreen();
+  if (ledsEnabled) {
+    ledTest = true;
+    ledTestStart = millis();
+  }
+}
+
 void toggleDisplay() {
   displayOn = !displayOn;
   Serial.printf("Button: display %s\n", displayOn ? "on" : "off");
@@ -184,10 +208,16 @@ void toggleDisplay() {
   if (displayOn) drawScreen();
 }
 
-// Long press fires as soon as it is held long enough; short press fires on release
+// Long press fires as soon as it is held long enough. A short press waits BUTTON_DOUBLE_MS
+// after release for a second one: single toggles sound, double toggles the LEDs
 void handleButton() {
-  static bool lastRaw = HIGH, pressed = false, longDone = false;
-  static uint32_t changedAt = 0, pressedAt = 0;
+  static bool lastRaw = HIGH, pressed = false, longDone = false, shortPending = false;
+  static uint32_t changedAt = 0, pressedAt = 0, releasedAt = 0;
+
+  if (shortPending && !pressed && millis() - releasedAt >= BUTTON_DOUBLE_MS) {
+    shortPending = false;
+    toggleSound();
+  }
 
   bool raw = digitalRead(BUTTON_PIN);
   if (raw != lastRaw) {
@@ -203,10 +233,18 @@ void handleButton() {
     pressedAt = millis();
   } else if (pressed && down && !longDone && millis() - pressedAt >= BUTTON_LONG_MS) {
     longDone = true;
+    shortPending = false;
     toggleDisplay();
   } else if (pressed && !down) {
     pressed = false;
-    if (!longDone) toggleSound();
+    if (longDone) return;
+    if (shortPending) {
+      shortPending = false;
+      toggleLeds();
+    } else {
+      shortPending = true;
+      releasedAt = millis();
+    }
   }
 }
 
