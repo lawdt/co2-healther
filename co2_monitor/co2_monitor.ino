@@ -21,10 +21,10 @@
 // HW-364A: onboard OLED wired to SDA=GPIO14 (D5), SCL=GPIO12 (D6)
 #define I2C_SDA 14
 #define I2C_SCL 12
-// SCD41 is soldered with SDA and SCL crossed relative to the OLED,
-// so the bus is switched to these pins around every sensor transaction
-#define SCD41_SDA I2C_SCL
-#define SCD41_SCL I2C_SDA
+// SCD41 shares the bus with the OLED. If its SDA/SCL wires are ever crossed,
+// swap these two: the bus is switched to them around every sensor transaction
+#define SCD41_SDA I2C_SDA
+#define SCD41_SCL I2C_SCL
 #define OLED_ADDR 0x3C
 
 #define SCREEN_WIDTH 128
