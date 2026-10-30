@@ -13,7 +13,7 @@
 #ifndef WIFI_PASSWORD_2
 #define WIFI_PASSWORD_2 WIFI_PASSWORD
 #endif
-// Night mode: no beeps, no LEDs, no blinking
+// Night mode: no beeps, no LEDs, no blinking, display off
 #define NIGHT_FROM_HOUR 21
 #define NIGHT_TO_HOUR 9
 // OLED contrast, 0..255. With the library default VCOMH (0x40) contrast barely
@@ -254,11 +254,27 @@ void toggleLeds() {
   }
 }
 
-void toggleDisplay() {
-  displayOn = !displayOn;
-  Serial.printf("Button: display %s\n", displayOn ? "on" : "off");
+void setDisplay(bool on) {
+  displayOn = on;
   display.ssd1306_command(displayOn ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
   if (displayOn) drawScreen();
+}
+
+void toggleDisplay() {
+  setDisplay(!displayOn);
+  Serial.printf("Button: display %s\n", displayOn ? "on" : "off");
+}
+
+// The screen goes dark when the night starts and comes back in the morning; a long press
+// still overrides it until the next switch. Without NTP time the screen just stays on
+void updateNightDisplay() {
+  static int8_t lastNight = -1;
+  if (time(nullptr) < 1700000000) return;
+  bool night = isNight();
+  if (night == lastNight) return;
+  lastNight = night;
+  Serial.printf("%s, display %s\n", night ? "Night" : "Day", night ? "off" : "on");
+  setDisplay(!night);
 }
 
 // Long press fires as soon as it is held long enough. A short press waits BUTTON_DOUBLE_MS
@@ -561,6 +577,7 @@ void loop() {
   if (millis() - lastPoll < 1000) return;
   lastPoll = millis();
   logTimeOnce();
+  updateNightDisplay();
 
   if (sensorOk) {
     bool ready = false;
