@@ -14,6 +14,7 @@
 #define WIFI_PASSWORD_2 WIFI_PASSWORD
 #endif
 // Night mode: no beeps, no LEDs, no blinking, display off
+// Defaults; the hours can be changed over MQTT and are kept in EEPROM
 #define NIGHT_FROM_HOUR 21
 #define NIGHT_TO_HOUR 9
 // OLED contrast, 0..255. With the library default VCOMH (0x40) contrast barely
@@ -89,6 +90,8 @@ uint32_t lastAlertBeep = 0;
 // Runtime mute switch, toggled over MQTT or the button and kept in EEPROM
 bool buzzerEnabled = false;
 bool ledsEnabled = true;
+uint8_t nightFrom = NIGHT_FROM_HOUR;
+uint8_t nightTo = NIGHT_TO_HOUR;
 uint32_t ledTestStart = 0;
 bool ledTest = false;
 bool displayOn = true;
@@ -172,7 +175,10 @@ bool isNight() {
   if (now < 1700000000) return true;
   struct tm local;
   localtime_r(&now, &local);
-  return local.tm_hour >= NIGHT_FROM_HOUR || local.tm_hour < NIGHT_TO_HOUR;
+  // Same hours means no night at all; the range may cross midnight or not
+  if (nightFrom == nightTo) return false;
+  if (nightFrom < nightTo) return local.tm_hour >= nightFrom && local.tm_hour < nightTo;
+  return local.tm_hour >= nightFrom || local.tm_hour < nightTo;
 }
 
 void beep(uint16_t ms, uint8_t times = 1, uint16_t gap = 150) {

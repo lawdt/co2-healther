@@ -1,5 +1,5 @@
 // MQTT with Home Assistant discovery: CO2/temperature/humidity sensors,
-// alert binary sensor and a switch for the buzzer
+// alert binary sensor, a switch for the buzzer and the night mode hours
 
 #include <PubSubClient.h>
 #include <EEPROM.h>
@@ -10,22 +10,32 @@
 #define TOPIC_STATE TOPIC_BASE "/state"
 #define TOPIC_BUZZER_SET TOPIC_BASE "/buzzer/set"
 #define TOPIC_BUZZER_STATE TOPIC_BASE "/buzzer/state"
+#define TOPIC_NIGHT_FROM_SET TOPIC_BASE "/night_from/set"
+#define TOPIC_NIGHT_FROM_STATE TOPIC_BASE "/night_from/state"
+#define TOPIC_NIGHT_TO_SET TOPIC_BASE "/night_to/set"
+#define TOPIC_NIGHT_TO_STATE TOPIC_BASE "/night_to/state"
 #define DISCOVERY_PREFIX "homeassistant"
 
 #define MQTT_PUBLISH_MS 30000
 #define MQTT_RETRY_MS 10000
 
-// EEPROM layout: magic byte, buzzer flag, LEDs flag (0xFF on older layouts means on)
+// EEPROM layout: magic byte, buzzer flag, LEDs flag, night start hour, night end hour.
+// Bytes added later read as 0xFF on older layouts: LEDs on, default night hours
 #define EEPROM_MAGIC 0xC2
 
 WiFiClient net;
 PubSubClient mqtt(net);
 
 void loadSettings() {
-  EEPROM.begin(4);
+  EEPROM.begin(8);
   if (EEPROM.read(0) == EEPROM_MAGIC) {
     buzzerEnabled = EEPROM.read(1);
     ledsEnabled = EEPROM.read(2) != 0;
+    uint8_t from = EEPROM.read(3), to = EEPROM.read(4);
+    if (from < 24 && to < 24) {
+      nightFrom = from;
+      nightTo = to;
+    }
   }
 }
 
@@ -33,11 +43,21 @@ void saveSettings() {
   EEPROM.write(0, EEPROM_MAGIC);
   EEPROM.write(1, buzzerEnabled);
   EEPROM.write(2, ledsEnabled);
+  EEPROM.write(3, nightFrom);
+  EEPROM.write(4, nightTo);
   EEPROM.commit();
 }
 
 void publishBuzzerState() {
   mqtt.publish(TOPIC_BUZZER_STATE, buzzerEnabled ? "ON" : "OFF", true);
+}
+
+void publishNightHours() {
+  char value[4];
+  snprintf(value, sizeof(value), "%u", nightFrom);
+  mqtt.publish(TOPIC_NIGHT_FROM_STATE, value, true);
+  snprintf(value, sizeof(value), "%u", nightTo);
+  mqtt.publish(TOPIC_NIGHT_TO_STATE, value, true);
 }
 
 void publishDiscovery(const char *component, const char *key, const char *extra) {
@@ -74,9 +94,42 @@ void publishAllDiscovery() {
   publishDiscovery("switch", "buzzer",
                    "\"name\":\"Buzzer\",\"command_topic\":\"" TOPIC_BUZZER_SET "\","
                    "\"state_topic\":\"" TOPIC_BUZZER_STATE "\",\"icon\":\"mdi:volume-high\"");
+  publishDiscovery("number", "night_from",
+                   "\"name\":\"Night from\",\"command_topic\":\"" TOPIC_NIGHT_FROM_SET "\","
+                   "\"state_topic\":\"" TOPIC_NIGHT_FROM_STATE "\",\"min\":0,\"max\":23,\"step\":1,"
+                   "\"mode\":\"box\",\"unit_of_measurement\":\"h\",\"entity_category\":\"config\","
+                   "\"icon\":\"mdi:weather-night\"");
+  publishDiscovery("number", "night_to",
+                   "\"name\":\"Night to\",\"command_topic\":\"" TOPIC_NIGHT_TO_SET "\","
+                   "\"state_topic\":\"" TOPIC_NIGHT_TO_STATE "\",\"min\":0,\"max\":23,\"step\":1,"
+                   "\"mode\":\"box\",\"unit_of_measurement\":\"h\",\"entity_category\":\"config\","
+                   "\"icon\":\"mdi:weather-sunny\"");
+}
+
+// Hour from an MQTT payload like "21" or "21.0"; -1 if it is not 0..23
+int parseHour(byte *payload, unsigned int length) {
+  char text[8];
+  if (length == 0 || length >= sizeof(text)) return -1;
+  memcpy(text, payload, length);
+  text[length] = 0;
+  char *end;
+  float value = strtof(text, &end);
+  if (end == text || value < 0 || value > 23) return -1;
+  return (int)value;
 }
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
+  bool from = strcmp(topic, TOPIC_NIGHT_FROM_SET) == 0;
+  if (from || strcmp(topic, TOPIC_NIGHT_TO_SET) == 0) {
+    int hour = parseHour(payload, length);
+    if (hour >= 0) {
+      (from ? nightFrom : nightTo) = hour;
+      Serial.printf("MQTT night %02u:00-%02u:00\n", nightFrom, nightTo);
+      saveSettings();
+    }
+    publishNightHours();
+    return;
+  }
   if (strcmp(topic, TOPIC_BUZZER_SET) != 0) return;
 
   bool on = length == 2 && memcmp(payload, "ON", 2) == 0;
@@ -121,7 +174,10 @@ void mqttLoop() {
     mqtt.publish(TOPIC_STATUS, "online", true);
     publishAllDiscovery();
     publishBuzzerState();
+    publishNightHours();
     mqtt.subscribe(TOPIC_BUZZER_SET);
+    mqtt.subscribe(TOPIC_NIGHT_FROM_SET);
+    mqtt.subscribe(TOPIC_NIGHT_TO_SET);
   }
   mqtt.loop();
 }
